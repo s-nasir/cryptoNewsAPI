@@ -6,7 +6,6 @@ const PORT = process.env.PORT || 9000;
 const express = require("express");
 const axios = require("axios");
 const cheerio = require("cheerio");
-const stripe = require('stripe')('pk_test_51KHG1tGqQgKnZiFIv6KQiIMLVyZH9L30epQfn7H8BXtHxWKFPdykCyVgPQ8lgokPG9c2zPzy5UsLDIfPZoXgL4sH00MvBLx8Ml')
 const app = express();
 
 // --------------------------------------------
