@@ -16,10 +16,6 @@ app.get("/", (req, res) => {
   res.json("Welcome to Crypto news API");
 });
 
-app.get("/news", (req, res) => {
-  res.json(articles);
-});
-
 app.listen(PORT, () => console.log(`server running on ${PORT}`));
 
 // --------------------------------------------
@@ -152,7 +148,7 @@ const keywords = [
   "ANKR",
 ];
 
-app.get("/scrape", async (req, res) => {
+app.get("/news", async (req, res) => {
   const articles = [];
 
   for (const source of newsSrc) {
