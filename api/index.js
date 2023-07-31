@@ -179,6 +179,43 @@ app.get("/news", async (req, res) => {
   res.json(articles);
 });
 
+app.get("news/:newspaperID", async (req, res) => {
+  const newspaperId = req.params.newspaperId;
+
+  const selectiveArticles = [];
+
+  const newspaperAddress = newsSrc.filter(
+    (newsSrc) => newsSrc.name == newspaperId
+  )[0].address;
+  const newspaperBase = newsSrc.filter(
+    (newsSrc) => newsSrc.name == newspaperId
+  )[0].base;
+
+  if (newspaperAddress && isValidUrl(newspaperAddress)) {
+    try {
+      const response = await axios.get(newspaperAddress);
+      const html = response.data;
+      const $ = cheerio.load(html);
+
+      keywords.forEach((keyword) => {
+        $(`a:contains("${keyword}")`).each(function () {
+          const title = $(this).text();
+          const url = $(this).attr("href");
+
+          selectiveArticles.push({
+            title,
+            url: newspaperBase + url,
+            source: newspaperId,
+          });
+        });
+      });
+    } catch (error) {
+      console.error(`Failed to scrape ${newspaperAddress}: ${error}`);
+    }
+  }
+  res.json(selectiveArticles);
+});
+
 //*Keyword Scraping functions for specific source
 
 // app.get('/news/:newspaperId', (req, res) => {
