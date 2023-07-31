@@ -26,9 +26,6 @@ app.listen(PORT, () => console.log(`server running on ${PORT}`));
 
 //* Setting up arrays
 
-//* Array to collect pushed title, and url.
-const articles = [];
-
 //* Storing News source info
 const newsSrc = [
   {
@@ -155,27 +152,35 @@ const keywords = [
   "ANKR",
 ];
 
-newsSrc.forEach((newsSrc) => {
-  // Check if newsSrc.address is a valid URL before making a request
-  if (newsSrc.address && isValidUrl(newsSrc.address)) {
-    axios.get(newsSrc.address).then((response) => {
-      const html = response.data;
-      const $ = cheerio.load(html);
+app.get("/scrape", async (req, res) => {
+  const articles = [];
 
-      keywords.forEach((keyword) => {
-        $(`a:contains("${keyword}")`).each(function () {
-          const title = $(this).text();
-          const url = $(this).attr("href");
+  for (const source of newsSrc) {
+    if (source.address && isValidUrl(source.address)) {
+      try {
+        const response = await axios.get(source.address);
+        const html = response.data;
+        const $ = cheerio.load(html);
 
-          articles.push({
-            title,
-            url: newsSrc.base + url,
-            source: newsSrc.name,
+        keywords.forEach((keyword) => {
+          $(`a:contains("${keyword}")`).each(function () {
+            const title = $(this).text();
+            const url = $(this).attr("href");
+
+            articles.push({
+              title,
+              url: source.base + url,
+              source: source.name,
+            });
           });
         });
-      });
-    });
+      } catch (error) {
+        console.error(`Failed to scrape ${source.address}: ${error}`);
+      }
+    }
   }
+
+  res.json(articles);
 });
 
 //*Keyword Scraping functions for specific source
