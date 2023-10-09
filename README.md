@@ -4,7 +4,18 @@
 
 ## Overview
 
-The Crypto News Query API is a powerful web search tool designed to aggregate cryptocurrency news articles from 18 renowned international news sources. It provides access to article titles, URLs, and their respective source websites, making it a valuable resource for staying up-to-date with the latest developments in the cryptocurrency world.
+The Crypto News Query API is a powerful web search tool designed to aggregate cryptocurrency news articles from 18 renowned international news sources. It provides access to article titles, URLs, and their respective source websites, making it a valuable resource for staying up-to-date with the latest developments in the cryptocurrency world. The goal is to promote and make trusted information available easy to lessen the current trend of false information effecting the Crypto market stocks.
+
+## Problem & Solution
+
+In the current era, cryptocurrency has seen a surge in popularity, with a majority of individuals showing varying degrees of interest in investing in this digital asset. Regrettably, this interest is often fueled by unrealistic expectations of cryptocurrency's future, leading to a lack of understanding of its historical use by criminals due to its untraceable nature [[1]](https://news.harvard.edu/gazette/story/2021/09/regulating-the-unregulated-cryptocurrency-market/).
+
+Cryptocurrency's volatile and untraceable nature has resulted in numerous instances of fraud, leading to substantial losses. In addition, fake news about the rising value of cryptocurrencies has been prevalent, often promoted by numerous unverified "crypto gurus". This has led to small-time investors making hasty investment decisions, causing market fluctuations and ultimately leading to a cash out by all investors, further contributing to the volatility of cryptocurrencies [[2]](https://www.wsj.com/articles/crypto-frauds-target-investors-hoping-to-cash-in-on-bitcoin-boom-11623058380).
+
+To address the issue of fake news sources, I have developed an API that allows website and blog owners to obtain real-time news from trusted sources. It's important to note that "trusted" does not necessarily mean the news itself is authentic. Rather, the sources are trusted by the majority in their respective regions, thus qualifying as trusted. Despite the volatility and unpredictability of the cryptocurrency market, caution is advised for those using the API [[3]](https://www.ftc.gov/business-guidance/blog/2022/06/reported-crypto-scam-losses-2021-top-1-billion-says-ftc-data-spotlight).
+
+Here is an article by Federal Trade Commission (An official website of the United States government) [[4]](https://consumer.ftc.gov/articles/what-know-about-cryptocurrency-and-scams) which provides an in depth review on cryptocurrencies. 
+
 
 ## Key Features
 
