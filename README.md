@@ -1,52 +1,140 @@
-# Crypto News Query API
+# Crypto News Explorer
+
+Crypto News Explorer is a full-stack web application for discovering and filtering the latest cryptocurrency news from multiple sources. It features a custom-built backend scraper and a modern React frontend, allowing users to filter news by source, cryptocurrency, and buzzwords.
 
 ---
 
-## Overview
+## Features
+- **Aggregates crypto news** from multiple reputable sources
+- **Custom backend scraper** for real-time article extraction
+- **Three filter categories:**
+  - News Source
+  - Type of Crypto
+  - Buzzwords
+- **Modern frontend** built with React, TypeScript, Tailwind CSS, and Vite
+- **Responsive UI** for desktop and mobile
+- **API-driven architecture**
 
-The Crypto News Query API is a powerful web search tool designed to aggregate cryptocurrency news articles from 18 renowned international news sources. It provides access to article titles, URLs, and their respective source websites, making it a valuable resource for staying up-to-date with the latest developments in the cryptocurrency world. The goal is to promote and make trusted information available easy to lessen the current trend of false information effecting the Crypto market stocks.
+---
 
-## Problem & Solution
+## Project Structure
 
-In the current era, cryptocurrency has seen a surge in popularity, with a majority of individuals showing varying degrees of interest in investing in this digital asset. Regrettably, this interest is often fueled by unrealistic expectations of cryptocurrency's future, leading to a lack of understanding of its historical use by criminals due to its untraceable nature [[1]](https://news.harvard.edu/gazette/story/2021/09/regulating-the-unregulated-cryptocurrency-market/).
+```
+cryptoNewsAPI/
+├── client/   # React + Vite frontend
+├── server/   # Node.js + Express backend scraper API
+└── README.md
+```
 
-Cryptocurrency's volatile and untraceable nature has resulted in numerous instances of fraud, leading to substantial losses. In addition, fake news about the rising value of cryptocurrencies has been prevalent, often promoted by numerous unverified "crypto gurus". This has led to small-time investors making hasty investment decisions, causing market fluctuations and ultimately leading to a cash out by all investors, further contributing to the volatility of cryptocurrencies [[2]](https://www.wsj.com/articles/crypto-frauds-target-investors-hoping-to-cash-in-on-bitcoin-boom-11623058380).
+---
 
-To address the issue of fake news sources, I have developed an API that allows website and blog owners to obtain real-time news from trusted sources. It's important to note that "trusted" does not necessarily mean the news itself is authentic. Rather, the sources are trusted by the majority in their respective regions, thus qualifying as trusted. Despite the volatility and unpredictability of the cryptocurrency market, caution is advised for those using the API [[3]](https://www.ftc.gov/business-guidance/blog/2022/06/reported-crypto-scam-losses-2021-top-1-billion-says-ftc-data-spotlight).
+## How It Works
 
-Here is an article by Federal Trade Commission (An official website of the United States government) [[4]](https://consumer.ftc.gov/articles/what-know-about-cryptocurrency-and-scams) which provides an in depth review on cryptocurrencies. 
+### Backend Scraper Logic
 
+The backend is a Node.js/Express API that scrapes and serves crypto news articles using the following logic:
 
-## Key Features
+1. **Web Scraping**
+   - Fetches HTML from each news source using Axios.
+   - Extracts all `<a>` (anchor) tags from the HTML using a regular expression to find article links.
 
-- **Customized Keyword Search**: The API utilizes niche-specific keywords, carefully tailored to yield over 200 search results from a select pool of 18 trusted news sources. 
+2. **Data Filtering**
+   - Filters extracted links to retain only those whose text contains user-specified cryptocurrency names or buzzwords.
+   - This ensures only relevant articles are returned.
 
-- **Real-Time Updates**: Built with Node.js and Express.js, the API employs the Cheerio website scanning package to enable dynamic functionality. This ensures that users receive real-time article updates with a simple page refresh.
+3. **URL Normalization**
+   - Converts relative URLs to absolute URLs using the source's base URL, ensuring all article links are valid and clickable.
 
-- **Flexible Filtering**: The API offers flexibility in filtering search results based on selected sources or specific keywords, allowing users to pinpoint the information that matters most to them.
+4. **Parallel Scraping**
+   - Fetches data from multiple sources concurrently for fast response times.
 
-## How to Use
+5. **Result Formatting**
+   - Returns a structured list of articles, each with a title, URL, and source name.
 
-### Retrieve Crypto News Articles
+**Data Science Logic Overview:**
+- **Data Retrieval:** Scrapes structured data from unstructured web pages.
+- **Data Filtering:** Filters articles by user-defined keywords (cryptos/buzzwords).
+- **Data Transformation:** Normalizes and formats data for frontend consumption.
+- **Optimization:** Uses parallel processing for efficient data retrieval.
 
-To retrieve cryptocurrency news articles, make a GET request to the `/news` endpoint. This will provide you with a list of articles from various sources that match the predefined keywords.
+### API Endpoints
+- `GET /meta` — Returns available sources, cryptos, and buzzwords for filters.
+- `GET /articles` — Returns filtered articles based on query parameters:
+  - `sources` (comma-separated)
+  - `cryptos` (comma-separated)
+  - `buzz` (comma-separated)
 
-### Retrieve Articles from a Specific Source
+---
 
-To fetch articles from a specific news source, make a GET request to the `/news/:newspaperID` endpoint, where `:newspaperID` should be replaced with the desired source's identifier (e.g., "The-Guardian-Crypto"). This will give you a list of articles from the chosen source.
+### Frontend
+- Built with **React**, **TypeScript**, **Tailwind CSS**, and **Vite**
+- Fetches filter options and articles from the backend API
+- Allows users to filter news by source, crypto, and buzzword
+- Responsive, modern UI
 
-### Retrieve Articles for a Specific Keyword 
+---
 
-To retrieve articles on a specific keyword, make a GET request to the `/keyword` endpoint, where `keyword` should be replaced with a defined keyword from the keyword filter list provided by the author. This will fetch you all the articles for the chosen keyword from defined news sources.
+## Getting Started
 
-## Project Details
+### Prerequisites
+- Node.js (v18+ recommended)
+- npm
 
-- **Development Stack**: Node.js, Express.js, Axios, Cheerio
+### Setup
 
-- **Data Sources**: The API scrapes articles from 18 international news sources known for their cryptocurrency coverage.
+#### 1. Clone the repository
+```bash
+git clone https://github.com/yourusername/cryptoNewsAPI.git
+cd cryptoNewsAPI
+```
 
-## Conclusion
+#### 2. Install dependencies
+```bash
+cd server
+npm install
+cd ../client
+npm install
+```
 
-The Crypto News Query API represents a robust solution for accessing real-time cryptocurrency news. Its flexibility in searching, filtering, and dynamic updates ensures that users can stay informed in an ever-evolving crypto landscape. Whether you're a developer looking to integrate crypto news into your application or a cryptocurrency enthusiast seeking the latest updates, this API has you covered.
+#### 3. Environment Variables
+- **Backend (`server/.env`):**
+  ```env
+  PORT=9000
+  FRONTEND_URL=http://localhost:5173
+  ```
+- **Frontend (`client/.env` or `.env.production`):**
+  ```env
+  VITE_API_URL=http://localhost:9000
+  ```
+
+#### 4. Run the app locally
+- **Backend:**
+  ```bash
+  cd server
+  npm run dev
+  ```
+- **Frontend:**
+  ```bash
+  cd client
+  npm run dev
+  ```
+
+---
+
+## Deployment
+
+- **Frontend:** Deploy the `client` folder to Vercel, Netlify, or similar static hosting.
+- **Backend:** Deploy the `server` folder to Render, Railway, Fly.io, or similar Node.js hosting.
+- Set environment variables for production URLs as needed.
+
+---
+
+## License
+MIT
+
+---
+
+## Credits
+Crypto News Explorer — built with ❤️ using Node.js, Express, React, TypeScript, and Tailwind CSS.
 
 ---
