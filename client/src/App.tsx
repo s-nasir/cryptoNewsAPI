@@ -130,7 +130,7 @@ export default function App() {
       const { data } = await axios.get<SearchResponse>(`${API}/articles?${qs.toString()}`);
       setResults(data.articles);
       if (data.errors?.length) {
-        setError(data.errors.join('\n'));
+        console.error('Scraping errors:', data.errors);
       }
     } catch (e) {
       console.error("/articles failed", e);
@@ -240,7 +240,10 @@ export default function App() {
                   alt={a.title}
                   className="mb-2 w-full max-h-48 object-cover rounded"
                   loading="lazy"
-                  onError={() => setImageErrors(prev => new Set([...prev, i]))}
+                  onError={() => {
+                    console.warn(`Failed to load image for article: ${a.title}`);
+                    setImageErrors(prev => new Set([...prev, i]));
+                  }}
                 />
               )}
               <div className="flex items-center gap-2 mb-2">
