@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 
+// Configure axios defaults
+const api = axios.create({
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
+
 interface Article {
   title: string;
   url: string;
@@ -45,7 +53,7 @@ export default function App() {
 
   /* ------------- fetch filter vocabulary ------------- */
   useEffect(() => {
-    axios
+    api
       .get<Meta>(`${API}/meta`)
       .then((r) => {
         setMeta(r.data);
@@ -71,7 +79,7 @@ export default function App() {
       if (selCryptos.length) qs.append("cryptos", selCryptos.join(","));
       if (selBuzz.length) qs.append("buzz", selBuzz.join(","));
 
-      const { data } = await axios.get<Article[]>(`${API}/articles?${qs.toString()}`);
+      const { data } = await api.get<Article[]>(`${API}/articles?${qs.toString()}`);
       setResults(data);
     } catch (e) {
       console.error("/articles failed", e);
