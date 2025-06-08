@@ -19,8 +19,13 @@ const logger = winston.createLogger({
   ],
 });
 
+// Memory management
+const MAX_ARTICLES_PER_SOURCE = 50; // Limit articles per source
+const BATCH_SIZE = 1000; // Process articles in batches
+
 const app = express();
 const PORT = process.env.PORT || 9000;
+
 // Security middlewares
 app.use(helmet());
 app.use(cors({ 
@@ -40,6 +45,16 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Memory monitoring middleware
+app.use((req, res, next) => {
+  const used = process.memoryUsage();
+  logger.debug('Memory usage:', {
+    rss: `${Math.round(used.rss / 1024 / 1024)}MB`,
+    heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)}MB`,
+    heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)}MB`
+  });
+  next();
+});
 
 app.get("/meta", (_, res) => {
   try {
@@ -117,26 +132,34 @@ app.get("/articles", async (req: Request, res: Response) => {
     let all: Article[] = [];
     const errors: string[] = [];
     
-    batches.forEach((result, index) => {
+    // Process results in batches to manage memory
+    for (let i = 0; i < batches.length; i++) {
+      const result = batches[i];
       if (result.status === 'fulfilled') {
-        all = all.concat(result.value);
+        // Limit articles per source
+        const articles = result.value.slice(0, MAX_ARTICLES_PER_SOURCE);
+        all = all.concat(articles);
       } else {
         const error = result.reason instanceof Error ? result.reason.message : 'Unknown error';
-        errors.push(`Failed to scrape ${wantSrc[index]}: ${error}`);
-        logger.error(`Failed to scrape ${wantSrc[index]}:`, result.reason);
+        errors.push(`Failed to scrape ${wantSrc[i]}: ${error}`);
+        logger.error(`Failed to scrape ${wantSrc[i]}:`, result.reason);
       }
-    });
-
-    // additional filtering if query params provided
-    if (wantCr.length) {
-      all = all.filter(a =>
-        wantCr.some(k => a.title.toLowerCase().includes(k.toLowerCase()))
-      );
     }
-    if (wantBw.length) {
-      all = all.filter(a =>
-        wantBw.some(k => a.title.toLowerCase().includes(k.toLowerCase()))
-      );
+
+    // Process filtering in batches
+    if (wantCr.length || wantBw.length) {
+      const filtered: Article[] = [];
+      for (let i = 0; i < all.length; i += BATCH_SIZE) {
+        const batch = all.slice(i, i + BATCH_SIZE);
+        const filteredBatch = batch.filter(a => {
+          const title = a.title.toLowerCase();
+          const hasCrypto = !wantCr.length || wantCr.some(k => title.includes(k.toLowerCase()));
+          const hasBuzz = !wantBw.length || wantBw.some(k => title.includes(k.toLowerCase()));
+          return hasCrypto && hasBuzz;
+        });
+        filtered.push(...filteredBatch);
+      }
+      all = filtered;
     }
 
     // Sort by source for consistent ordering
@@ -144,6 +167,11 @@ app.get("/articles", async (req: Request, res: Response) => {
 
     const [seconds, nanoseconds] = process.hrtime(startTime);
     const totalTime = seconds + nanoseconds / 1e9;
+    
+    // Force garbage collection if available
+    if (global.gc) {
+      global.gc();
+    }
     
     logger.info(`Returning ${all.length} articles in ${totalTime.toFixed(2)} seconds`);
     res.json({
