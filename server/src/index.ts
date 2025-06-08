@@ -107,13 +107,13 @@ app.get("/articles", async (req: Request, res: Response) => {
     }
 
     // Set overall request timeout
-    const requestTimeout = 20000; // Reduced to 20 seconds
+    const requestTimeout = 20000; 
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Request timeout')), requestTimeout);
     });
 
     // parallel scraping with timeout
-    const scrapeTimeout = 8000; // Reduced to 8 seconds timeout per source
+    const scrapeTimeout = 16000; 
     const scrapePromises = wantSrc.map(src =>
       Promise.race([
         scrapeOne(src),
