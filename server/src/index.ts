@@ -22,6 +22,12 @@ const logger = winston.createLogger({
   exitOnError: false // Prevent memory leaks
 });
 
+// Helper function to limit error message length
+const limitErrorLength = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.length > 150 ? message.substring(0, 147) + '...' : message;
+};
+
 // Memory management
 const MAX_ARTICLES_PER_SOURCE = 50; // Limit articles per source
 const BATCH_SIZE = 1000; // Process articles in batches
@@ -67,7 +73,7 @@ app.get("/meta", (_, res) => {
       buzzwords: BUZZWORDS
     });
   } catch (e) {
-    logger.error(`Meta endpoint error: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    logger.error(`Meta endpoint error: ${limitErrorLength(e)}`);
     res.status(500).json({ error: "Failed to fetch metadata" });
   }
 });
@@ -140,7 +146,7 @@ app.get("/articles", async (req: Request, res: Response) => {
         const articles = result.value.slice(0, MAX_ARTICLES_PER_SOURCE);
         all = all.concat(articles);
       } else {
-        const error = result.reason instanceof Error ? result.reason.message : 'Unknown error';
+        const error = limitErrorLength(result.reason);
         errors.push(`Failed to scrape ${wantSrc[i]}: ${error}`);
       }
     }
@@ -185,10 +191,10 @@ app.get("/articles", async (req: Request, res: Response) => {
     const [seconds, nanoseconds] = process.hrtime(startTime);
     const totalTime = seconds + nanoseconds / 1e9;
     
-    logger.error(`Articles endpoint error after ${totalTime.toFixed(2)}s: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    logger.error(`Articles endpoint error after ${totalTime.toFixed(2)}s: ${limitErrorLength(e)}`);
     res.status(500).json({
       error: "Failed to fetch articles",
-      details: e instanceof Error ? e.message : "Unknown error",
+      details: limitErrorLength(e),
       meta: {
         totalArticles: 0,
         timeElapsed: totalTime.toFixed(2),
@@ -200,10 +206,10 @@ app.get("/articles", async (req: Request, res: Response) => {
 
 // Error handling middleware
 const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
-  logger.error("Unhandled error:", err);
+  logger.error(`Unhandled error: ${limitErrorLength(err)}`);
   res.status(500).json({ 
     error: "Internal server error",
-    details: err instanceof Error ? err.message : "Unknown error"
+    details: limitErrorLength(err)
   });
 };
 app.use(errorHandler);
