@@ -23,7 +23,15 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const API = import.meta.env.VITE_API_URL || '/api'; // Use environment variable or fallback to proxy
+  // Get API URL from environment variable
+  const API_URL = import.meta.env.VITE_API_URL;
+  const API = API_URL || '/api';
+
+  // Log API URL for debugging
+  useEffect(() => {
+    console.log('API URL:', API_URL);
+    console.log('Using API endpoint:', API);
+  }, [API, API_URL]);
 
   /* ---------------- helpers ---------------- */
   const toggle = (arr: string[], v: string): string[] =>
