@@ -4,6 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import winston from "winston";
+import compression from "compression";
 import { scrapeOne, SOURCES, CRYPTOS, BUZZWORDS, Article } from "./scrape";
 
 dotenv.config();
@@ -22,11 +23,23 @@ const logger = winston.createLogger({
 
 const app = express();
 const PORT = process.env.PORT || 9000;
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-
 // Security middlewares
 app.use(helmet());
-app.use(cors({ origin: FRONTEND_URL }));
+app.use(cors({ 
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://crypto-news-explorer.vercel.app',
+      'https://crypto-news-explorer.vercel.app/'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // Rate limiting
@@ -37,6 +50,9 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use(limiter);
+
+// Add compression middleware
+app.use(compression());
 
 // meta endpoint – lets the UI build filter lists dynamically
 app.get("/meta", (_, res) => {
@@ -57,6 +73,8 @@ app.get("/articles", async (req: Request, res: Response) => {
     const wantSrc = (req.query.sources as string)?.split(",").filter(Boolean) ?? SOURCES.map(s=>s.name);
     const wantCr  = (req.query.cryptos as string)?.split(",").filter(Boolean) ?? [];
     const wantBw  = (req.query.buzz    as string)?.split(",").filter(Boolean) ?? [];
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
 
     // Input validation
     if (wantSrc.length > 20) {
@@ -89,13 +107,13 @@ app.get("/articles", async (req: Request, res: Response) => {
     }
 
     // Set overall request timeout
-    const requestTimeout = 30000; // 30 seconds
+    const requestTimeout = 20000; // Reduced to 20 seconds
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Request timeout')), requestTimeout);
     });
 
     // parallel scraping with timeout
-    const scrapeTimeout = 15000; // 15 seconds timeout per source
+    const scrapeTimeout = 8000; // Reduced to 8 seconds timeout per source
     const scrapePromises = wantSrc.map(src =>
       Promise.race([
         scrapeOne(src),
@@ -139,9 +157,17 @@ app.get("/articles", async (req: Request, res: Response) => {
     // Sort by source for consistent ordering
     all.sort((a, b) => a.source.localeCompare(b.source));
 
-    logger.info(`Returning ${all.length} articles`);
+    // Implement pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    const paginatedArticles = all.slice(startIndex, endIndex);
+
+    logger.info(`Returning ${paginatedArticles.length} articles (page ${page})`);
     res.json({
-      articles: all,
+      articles: paginatedArticles,
+      total: all.length,
+      page,
+      totalPages: Math.ceil(all.length / limit),
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (e) {

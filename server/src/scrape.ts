@@ -1,7 +1,6 @@
 import axios from "axios";
-import { CookieJar } from "tough-cookie";
-import { wrapper } from "axios-cookiejar-support";
 import winston from "winston";
+import { JSDOM } from "jsdom";
 // import cheerio from "cheerio"; // work in progress
 
 // Winston logger setup
@@ -24,17 +23,18 @@ export interface Article {
 }
 
 function extractLinks(html: string): {text: string; href: string}[] {
+  const dom = new JSDOM(html);
+  const document = dom.window.document;
   const links: {text: string; href: string}[] = [];
-  const rx = /<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>(.*?)<\/a>/gim;
-
-  let m: RegExpExecArray | null;
-  while ((m = rx.exec(html))) {
-    const [, href, raw] = m;
-    const text = raw.replace(/<[^>]+>/g, "").trim();
+  
+  document.querySelectorAll('a').forEach(link => {
+    const text = link.textContent?.trim();
+    const href = link.getAttribute('href');
     if (text && href) {
       links.push({ text, href });
     }
-  }
+  });
+  
   return links;
 }
 
@@ -114,18 +114,13 @@ export async function scrapeOne(srcName: string): Promise<Article[]> {
 
     logger.info(`Scraping source: ${srcName} from ${src.url}`);
 
-    // Setup axios with cookie jar and user-agent
-    const jar = new CookieJar();
-    const client = wrapper(axios.create());
-
-    const { data } = await retry(() => client.get<string>(src.url, {
-      timeout: 10_000,
+    const { data } = await retry(() => axios.get<string>(src.url, {
+      timeout: 8000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
       },
-      jar,
       maxRedirects: 5,
       validateStatus: (status) => status >= 200 && status < 300
     }));
