@@ -25,18 +25,8 @@ const PORT = process.env.PORT || 9000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 // Security middlewares
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
-
-// CORS configuration
-app.use(cors({
-  origin: ['https://crypto-news-explorer.vercel.app', 'http://localhost:3000', 'http://localhost:5173'],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
-
+app.use(helmet());
+app.use(cors({ origin: FRONTEND_URL }));
 app.use(express.json());
 
 // Rate limiting
@@ -62,12 +52,32 @@ app.get("/meta", (_, res) => {
   }
 });
 
-
 app.get("/articles", async (req: Request, res: Response) => {
   try {
     const wantSrc = (req.query.sources as string)?.split(",").filter(Boolean) ?? SOURCES.map(s=>s.name);
     const wantCr  = (req.query.cryptos as string)?.split(",").filter(Boolean) ?? [];
     const wantBw  = (req.query.buzz    as string)?.split(",").filter(Boolean) ?? [];
+
+    // Input validation
+    if (wantSrc.length > 20) {
+      return res.status(400).json({
+        error: "Too many sources requested. Maximum is 20 sources."
+      });
+    }
+
+    if (wantCr.length > 50) {
+      return res.status(400).json({
+        error: "Too many cryptocurrencies requested. Maximum is 50."
+      });
+    }
+
+    if (wantBw.length > 50) {
+      return res.status(400).json({
+        error: "Too many buzzwords requested. Maximum is 50."
+      });
+    }
+
+    logger.info(`Processing request with sources: ${wantSrc.join(', ')}`);
 
     // Validate source names
     const invalidSources = wantSrc.filter(src => !SOURCES.some(s => s.name === src));
@@ -78,20 +88,41 @@ app.get("/articles", async (req: Request, res: Response) => {
       });
     }
 
+    // Set overall request timeout
+    const requestTimeout = 30000; // 30 seconds
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Request timeout')), requestTimeout);
+    });
+
     // parallel scraping with timeout
-    const timeout = 15000; // 15 seconds timeout
-    const batches = await Promise.all(
-      wantSrc.map(src =>
-        Promise.race([
-          scrapeOne(src),
-          new Promise<Article[]>((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout scraping ${src}`)), timeout)
-          )
-        ])
-      )
+    const scrapeTimeout = 15000; // 15 seconds timeout per source
+    const scrapePromises = wantSrc.map(src =>
+      Promise.race([
+        scrapeOne(src),
+        new Promise<Article[]>((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout scraping ${src}`)), scrapeTimeout)
+        )
+      ])
     );
 
-    let all: Article[] = batches.flat();
+    const batches = await Promise.race([
+      Promise.allSettled(scrapePromises),
+      timeoutPromise
+    ]) as PromiseSettledResult<Article[]>[];
+
+    // Process results and handle errors
+    let all: Article[] = [];
+    const errors: string[] = [];
+    
+    batches.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        all = all.concat(result.value);
+      } else {
+        const error = result.reason instanceof Error ? result.reason.message : 'Unknown error';
+        errors.push(`Failed to scrape ${wantSrc[index]}: ${error}`);
+        logger.error(`Failed to scrape ${wantSrc[index]}:`, result.reason);
+      }
+    });
 
     // additional filtering if query params provided
     if (wantCr.length) {
@@ -108,11 +139,16 @@ app.get("/articles", async (req: Request, res: Response) => {
     // Sort by source for consistent ordering
     all.sort((a, b) => a.source.localeCompare(b.source));
 
-    res.json(all);
+    logger.info(`Returning ${all.length} articles`);
+    res.json({
+      articles: all,
+      errors: errors.length > 0 ? errors : undefined
+    });
   } catch (e) {
     logger.error("Articles endpoint error:", e);
     res.status(500).json({
-      error: "Failed to fetch articles"
+      error: "Failed to fetch articles",
+      details: e instanceof Error ? e.message : "Unknown error"
     });
   }
 });
@@ -120,7 +156,10 @@ app.get("/articles", async (req: Request, res: Response) => {
 // Error handling middleware
 const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   logger.error("Unhandled error:", err);
-  res.status(500).json({ error: "Internal server error" });
+  res.status(500).json({ 
+    error: "Internal server error",
+    details: err instanceof Error ? err.message : "Unknown error"
+  });
 };
 app.use(errorHandler);
 
