@@ -22,7 +22,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node --max-old-space-size=512 --expose-gc dist/index.js",
-    "dev": "ts-node-dev --respawn --transpile-only --max-old-space-size=512 --expose-gc src/index.ts"
+    "start": "node --max-old-space-size=256 --expose-gc --optimize-for-size --max-semi-space-size=1 dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only --max-old-space-size=256 --expose-gc --optimize-for-size --max-semi-space-size=1 src/index.ts"
   }
 }
