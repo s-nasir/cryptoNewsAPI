@@ -23,7 +23,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const API = "/api"; // Using Vite's proxy
+  const API = import.meta.env.VITE_API_URL || '/api'; // Use environment variable or fallback to proxy
 
   /* ---------------- helpers ---------------- */
   const toggle = (arr: string[], v: string): string[] =>
@@ -47,7 +47,7 @@ export default function App() {
         console.error("/meta failed", e);
         setError("Failed to load filter options. Please try again later.");
       });
-  }, []);
+  }, [API]);
 
   /* ------------- search endpoint ------------- */
   const runSearch = async () => {
