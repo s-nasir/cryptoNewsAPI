@@ -12,6 +12,11 @@ interface Article {
 interface SearchResponse {
   articles: Article[];
   errors?: string[];
+  meta: {
+    totalArticles: number;
+    timeElapsed: string;
+    errorCount: number;
+  };
 }
 
 interface Meta {
@@ -65,6 +70,7 @@ export default function App() {
   const [metaLoading, setMetaLoading] = useState(true);
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [searchTime, setSearchTime] = useState<number | null>(null);
 
   // Get API URL from environment variable
   const API_URL = import.meta.env.VITE_API_URL;
@@ -119,6 +125,9 @@ export default function App() {
     if (!meta) return;
     setLoading(true);
     setError(null);
+    setSearchTime(null);
+    const startTime = performance.now();
+    
     try {
       const qs = new URLSearchParams();
       if (selSources.length && selSources.length !== meta.sources.length) {
@@ -129,6 +138,14 @@ export default function App() {
 
       const { data } = await axios.get<SearchResponse>(`${API}/articles?${qs.toString()}`);
       setResults(data.articles);
+      
+      // Log search results information
+      console.log('Search Results:', {
+        totalArticles: data.meta.totalArticles,
+        timeElapsed: `${data.meta.timeElapsed}s`,
+        errors: data.meta.errorCount > 0 ? data.errors : 'None'
+      });
+
       if (data.errors?.length) {
         console.error('Scraping errors:', data.errors);
       }
@@ -136,6 +153,8 @@ export default function App() {
       console.error("/articles failed", e);
       setError("Failed to fetch articles. Please try again.");
     } finally {
+      const endTime = performance.now();
+      setSearchTime((endTime - startTime) / 1000); // Convert to seconds
       setLoading(false);
     }
   }, [API, meta, selSources, selCryptos, selBuzz]);
@@ -213,6 +232,16 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* results count */}
+      {!loading && results.length > 0 && (
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-500">
+            Found {results.length} article{results.length !== 1 ? 's' : ''}
+            {searchTime !== null && ` in ${searchTime.toFixed(2)} seconds`}
+          </p>
+        </div>
+      )}
 
       {/* results */}
       <div className="mt-10 w-full max-w-full mx-auto">

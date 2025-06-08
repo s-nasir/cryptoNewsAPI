@@ -1,10 +1,8 @@
 import express, { Request, Response, NextFunction, ErrorRequestHandler } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import winston from "winston";
-import compression from "compression";
 import { scrapeOne, SOURCES, CRYPTOS, BUZZWORDS, Article } from "./scrape";
 
 dotenv.config();
@@ -42,19 +40,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(limiter);
 
-// Add compression middleware
-app.use(compression());
-
-// meta endpoint – lets the UI build filter lists dynamically
 app.get("/meta", (_, res) => {
   try {
     res.json({
@@ -69,12 +55,11 @@ app.get("/meta", (_, res) => {
 });
 
 app.get("/articles", async (req: Request, res: Response) => {
+  const startTime = process.hrtime();
   try {
     const wantSrc = (req.query.sources as string)?.split(",").filter(Boolean) ?? SOURCES.map(s=>s.name);
     const wantCr  = (req.query.cryptos as string)?.split(",").filter(Boolean) ?? [];
     const wantBw  = (req.query.buzz    as string)?.split(",").filter(Boolean) ?? [];
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
 
     // Input validation
     if (wantSrc.length > 20) {
@@ -107,13 +92,13 @@ app.get("/articles", async (req: Request, res: Response) => {
     }
 
     // Set overall request timeout
-    const requestTimeout = 20000; 
+    const requestTimeout = 20000; // 20 seconds
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Request timeout')), requestTimeout);
     });
 
     // parallel scraping with timeout
-    const scrapeTimeout = 16000; 
+    const scrapeTimeout = 8000; // 8 seconds timeout per source
     const scrapePromises = wantSrc.map(src =>
       Promise.race([
         scrapeOne(src),
@@ -157,24 +142,32 @@ app.get("/articles", async (req: Request, res: Response) => {
     // Sort by source for consistent ordering
     all.sort((a, b) => a.source.localeCompare(b.source));
 
-    // Implement pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedArticles = all.slice(startIndex, endIndex);
-
-    logger.info(`Returning ${paginatedArticles.length} articles (page ${page})`);
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    const totalTime = seconds + nanoseconds / 1e9;
+    
+    logger.info(`Returning ${all.length} articles in ${totalTime.toFixed(2)} seconds`);
     res.json({
-      articles: paginatedArticles,
-      total: all.length,
-      page,
-      totalPages: Math.ceil(all.length / limit),
-      errors: errors.length > 0 ? errors : undefined
+      articles: all,
+      errors: errors.length > 0 ? errors : undefined,
+      meta: {
+        totalArticles: all.length,
+        timeElapsed: totalTime.toFixed(2),
+        errorCount: errors.length
+      }
     });
   } catch (e) {
-    logger.error("Articles endpoint error:", e);
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    const totalTime = seconds + nanoseconds / 1e9;
+    
+    logger.error(`Articles endpoint error after ${totalTime.toFixed(2)} seconds:`, e);
     res.status(500).json({
       error: "Failed to fetch articles",
-      details: e instanceof Error ? e.message : "Unknown error"
+      details: e instanceof Error ? e.message : "Unknown error",
+      meta: {
+        totalArticles: 0,
+        timeElapsed: totalTime.toFixed(2),
+        errorCount: 1
+      }
     });
   }
 });
