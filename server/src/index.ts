@@ -15,9 +15,25 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   transports: [
+    // Console transport
     new winston.transports.Console({
       format: winston.format.printf(({ level, message }) => `${level}: ${message}`)
     }),
+    // File transport for all logs
+    new winston.transports.File({ 
+      filename: 'logs/api.log',
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+      tailable: true
+    }),
+    // Separate file for error logs
+    new winston.transports.File({ 
+      filename: 'logs/error.log', 
+      level: 'error',
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+      tailable: true
+    })
   ],
   exitOnError: false // Prevent memory leaks
 });
@@ -53,17 +69,6 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-
-// Memory monitoring middleware
-app.use((req, res, next) => {
-  const used = process.memoryUsage();
-  logger.debug('Memory usage:', {
-    rss: `${Math.round(used.rss / 1024 / 1024)}MB`,
-    heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)}MB`,
-    heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)}MB`
-  });
-  next();
-});
 
 app.get("/meta", (_, res) => {
   try {

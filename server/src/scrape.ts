@@ -3,7 +3,7 @@ import winston from "winston";
 import { JSDOM } from "jsdom";
 // import cheerio from "cheerio"; // work in progress
 
-// Winston logger setup
+// logger setup
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -11,8 +11,11 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   transports: [
-    new winston.transports.Console(),
+    new winston.transports.Console({
+      format: winston.format.printf(({ level, message }) => `${level}: ${message}`)
+    }),
   ],
+  exitOnError: false 
 });
 
 export interface Article {
@@ -39,9 +42,9 @@ function extractLinks(html: string): {text: string; href: string}[] {
 }
 
 export const SOURCES = [
-  { name: "guardian", url: "https://www.theguardian.com/technology/cryptocurrencies", base: "https://www.theguardian.com" },
+  // { name: "guardian", url: "https://www.theguardian.com/technology/cryptocurrencies", base: "https://www.theguardian.com" },
   { name: "bbc",      url: "https://www.bbc.com/news/topics/cyd7z4rvdm3t",           base: "https://www.bbc.com" },
-  { name: "cnbc",     url: "https://www.cnbc.com/cryptoworld/",                      base: "https://www.cnbc.com" },
+  // { name: "cnbc",     url: "https://www.cnbc.com/cryptoworld/",                      base: "https://www.cnbc.com" },
   { name: "times-now-crypto", url: "https://www.timesnownews.com/topic/crypto", base: "https://www.timesnownews.com" },
   { name: "forbes-crypto", url: "https://www.forbes.com/crypto-blockchain/?sh=5da619802b6e", base: "https://www.forbes.com" },
   { name: "fox-news-crypto", url: "https://www.foxbusiness.com/category/cryptocurrency", base: "https://www.foxbusiness.com" },
@@ -112,8 +115,6 @@ export async function scrapeOne(srcName: string): Promise<Article[]> {
     const src = SOURCES.find(s => s.name === srcName);
     if (!src) throw new Error(`Unknown source: ${srcName}`);
 
-    logger.info(`Scraping source: ${srcName} from ${src.url}`);
-
     const { data } = await retry(() => axios.get<string>(src.url, {
       timeout: 8000,
       headers: {
@@ -122,13 +123,23 @@ export async function scrapeOne(srcName: string): Promise<Article[]> {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
       },
       maxRedirects: 5,
-      validateStatus: (status) => status >= 200 && status < 300
+      validateStatus: (status) => status >= 200 && status < 300,
+      transformResponse: [(data) => {
+        if (typeof data !== 'string') {
+          throw new Error('Invalid response type');
+        }
+        return data;
+      }],
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      responseType: 'text'
     }));
 
-    const links = extractLinks(data);
-    logger.info(`Found ${links.length} links from ${srcName}`);
+    if (typeof data !== 'string') {
+      throw new Error('Invalid response data type');
+    }
 
-    // keyword matching
+    const links = extractLinks(data);
     const wanted = [...CRYPTOS, ...BUZZWORDS];
     const hit = (txt: string) =>
       wanted.some(k => txt.toLowerCase().includes(k.toLowerCase()));
@@ -145,10 +156,12 @@ export async function scrapeOne(srcName: string): Promise<Article[]> {
       })
       .filter(l => isValidUrl(l.url));
 
-    logger.info(`Filtered to ${filteredLinks.length} crypto-related articles from ${srcName}`);
+    if (filteredLinks.length > 0) {
+      logger.info(`${srcName}: ${filteredLinks.length} articles found`);
+    }
     return filteredLinks;
   } catch (error) {
-    logger.error(`Error scraping ${srcName}:`, error);
+    logger.error(`${srcName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     throw error;
   }
 }
