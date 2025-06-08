@@ -7,7 +7,7 @@ import { scrapeOne, SOURCES, CRYPTOS, BUZZWORDS, Article } from "./scrape";
 
 dotenv.config();
 
-// Winston logger setup with memory-efficient configuration
+// Winston logger setup
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -16,15 +16,15 @@ const logger = winston.createLogger({
   ),
   transports: [
     new winston.transports.Console({
-      format: winston.format.simple() // Use simple format to reduce memory usage
+      format: winston.format.printf(({ level, message }) => `${level}: ${message}`)
     }),
   ],
+  exitOnError: false // Prevent memory leaks
 });
 
 // Memory management
-const MAX_ARTICLES_PER_SOURCE = 25; // Reduced from 50
-const BATCH_SIZE = 500; // Reduced from 1000
-const MAX_TOTAL_ARTICLES = 200; // New limit for total articles
+const MAX_ARTICLES_PER_SOURCE = 50; // Limit articles per source
+const BATCH_SIZE = 1000; // Process articles in batches
 
 const app = express();
 const PORT = process.env.PORT || 9000;
@@ -46,23 +46,16 @@ app.use(cors({
   },
   credentials: true
 }));
-
-// Use compression for all responses
 app.use(express.json());
 
 // Memory monitoring middleware
 app.use((req, res, next) => {
   const used = process.memoryUsage();
-  if (used.heapUsed > 200 * 1024 * 1024) { // 200MB threshold
-    logger.warn('High memory usage detected:', {
-      rss: `${Math.round(used.rss / 1024 / 1024)}MB`,
-      heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)}MB`,
-      heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)}MB`
-    });
-    if (global.gc) {
-      global.gc();
-    }
-  }
+  logger.debug('Memory usage:', {
+    rss: `${Math.round(used.rss / 1024 / 1024)}MB`,
+    heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)}MB`,
+    heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)}MB`
+  });
   next();
 });
 
@@ -74,7 +67,7 @@ app.get("/meta", (_, res) => {
       buzzwords: BUZZWORDS
     });
   } catch (e) {
-    logger.error("Meta endpoint error:", e);
+    logger.error(`Meta endpoint error: ${e instanceof Error ? e.message : 'Unknown error'}`);
     res.status(500).json({ error: "Failed to fetch metadata" });
   }
 });
@@ -87,77 +80,72 @@ app.get("/articles", async (req: Request, res: Response) => {
     const wantBw  = (req.query.buzz    as string)?.split(",").filter(Boolean) ?? [];
 
     // Input validation
-    if (wantSrc.length > 10) { // Reduced from 20
+    if (wantSrc.length > 20) {
       return res.status(400).json({
-        error: "Too many sources requested. Maximum is 10 sources."
+        error: "Too many sources requested. Maximum is 20 sources."
       });
     }
 
-    if (wantCr.length > 25) { // Reduced from 50
+    if (wantCr.length > 50) {
       return res.status(400).json({
-        error: "Too many cryptocurrencies requested. Maximum is 25."
+        error: "Too many cryptocurrencies requested. Maximum is 50."
       });
     }
 
-    if (wantBw.length > 25) { // Reduced from 50
+    if (wantBw.length > 50) {
       return res.status(400).json({
-        error: "Too many buzzwords requested. Maximum is 25."
+        error: "Too many buzzwords requested. Maximum is 50."
       });
     }
-
-    logger.info(`Processing request with sources: ${wantSrc.join(', ')}`);
 
     // Validate source names
     const invalidSources = wantSrc.filter(src => !SOURCES.some(s => s.name === src));
     if (invalidSources.length > 0) {
-      logger.warn(`Invalid source(s): ${invalidSources.join(", ")}`);
       return res.status(400).json({
         error: `Invalid source(s): ${invalidSources.join(", ")}`
       });
     }
 
     // Set overall request timeout
-    const requestTimeout = 15000; // Reduced from 20000
+    const requestTimeout = 20000; // 20 seconds
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Request timeout')), requestTimeout);
     });
 
-    // Process sources sequentially to reduce memory usage
+    // parallel scraping with timeout
+    const scrapeTimeout = 8000; // 8 seconds timeout per source
+    const scrapePromises = wantSrc.map(src =>
+      Promise.race([
+        scrapeOne(src),
+        new Promise<Article[]>((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout scraping ${src}`)), scrapeTimeout)
+        )
+      ])
+    );
+
+    const batches = await Promise.race([
+      Promise.allSettled(scrapePromises),
+      timeoutPromise
+    ]) as PromiseSettledResult<Article[]>[];
+
+    // Process results and handle errors
     let all: Article[] = [];
     const errors: string[] = [];
     
-    for (const src of wantSrc) {
-      try {
-        const articles = await Promise.race([
-          scrapeOne(src),
-          new Promise<Article[]>((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout scraping ${src}`)), 8000)
-          )
-        ]);
-        
+    // Process results in batches to manage memory
+    for (let i = 0; i < batches.length; i++) {
+      const result = batches[i];
+      if (result.status === 'fulfilled') {
         // Limit articles per source
-        const limitedArticles = articles.slice(0, MAX_ARTICLES_PER_SOURCE);
-        all = all.concat(limitedArticles);
-        
-        // Check total articles limit
-        if (all.length >= MAX_TOTAL_ARTICLES) {
-          all = all.slice(0, MAX_TOTAL_ARTICLES);
-          logger.warn(`Reached maximum article limit of ${MAX_TOTAL_ARTICLES}`);
-          break;
-        }
-        
-        // Force garbage collection after each source
-        if (global.gc) {
-          global.gc();
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        errors.push(`Failed to scrape ${src}: ${errorMessage}`);
-        logger.error(`Failed to scrape ${src}:`, error);
+        const articles = result.value.slice(0, MAX_ARTICLES_PER_SOURCE);
+        all = all.concat(articles);
+      } else {
+        const error = result.reason instanceof Error ? result.reason.message : 'Unknown error';
+        errors.push(`Failed to scrape ${wantSrc[i]}: ${error}`);
       }
     }
 
-    // Process filtering in smaller batches
+    // Process filtering in batches
     if (wantCr.length || wantBw.length) {
       const filtered: Article[] = [];
       for (let i = 0; i < all.length; i += BATCH_SIZE) {
@@ -169,11 +157,6 @@ app.get("/articles", async (req: Request, res: Response) => {
           return hasCrypto && hasBuzz;
         });
         filtered.push(...filteredBatch);
-        
-        // Force garbage collection after each batch
-        if (global.gc) {
-          global.gc();
-        }
       }
       all = filtered;
     }
@@ -184,12 +167,11 @@ app.get("/articles", async (req: Request, res: Response) => {
     const [seconds, nanoseconds] = process.hrtime(startTime);
     const totalTime = seconds + nanoseconds / 1e9;
     
-    // Final garbage collection
+    // Force garbage collection if available
     if (global.gc) {
       global.gc();
     }
     
-    logger.info(`Returning ${all.length} articles in ${totalTime.toFixed(2)} seconds`);
     res.json({
       articles: all,
       errors: errors.length > 0 ? errors : undefined,
@@ -203,7 +185,7 @@ app.get("/articles", async (req: Request, res: Response) => {
     const [seconds, nanoseconds] = process.hrtime(startTime);
     const totalTime = seconds + nanoseconds / 1e9;
     
-    logger.error(`Articles endpoint error after ${totalTime.toFixed(2)} seconds:`, e);
+    logger.error(`Articles endpoint error after ${totalTime.toFixed(2)}s: ${e instanceof Error ? e.message : 'Unknown error'}`);
     res.status(500).json({
       error: "Failed to fetch articles",
       details: e instanceof Error ? e.message : "Unknown error",
